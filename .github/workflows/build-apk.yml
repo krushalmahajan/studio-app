@@ -1,0 +1,53 @@
+name: Build Studio Attendance APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KS_B64: ${{ secrets.STUDIO_KEYSTORE_BASE64 }}
+      STUDIO_KEYSTORE_PASSWORD: ${{ secrets.STUDIO_KEYSTORE_PASSWORD }}
+      STUDIO_KEY_ALIAS: ${{ secrets.STUDIO_KEY_ALIAS }}
+      STUDIO_KEY_PASSWORD: ${{ secrets.STUDIO_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # Optional: keystore from repository secrets. Without secrets the build uses keystore/ + keystore.properties from the repo.
+      - name: Use keystore from secrets
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "STUDIO_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Signing with keystore from secrets"
+          else
+            echo "Signing with keystore.properties from the repository"
+          fi
+
+      - name: Build release APK
+        run: gradle --no-daemon assembleRelease
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk out/studio-attendance.apk
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-attendance-apk
+          path: out/studio-attendance.apk
+          retention-days: 30
